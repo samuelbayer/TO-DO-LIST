@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Abel&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+      rel="stylesheet"
+    />
+    <title>To-Do List</title>
+    <meta
+      name="description"
+      content="Simple To-Do List app with localStorage and Sortable.js."
+    />
+  </head>
+  <body>
+    <main id="container">
+      <section id="todo-list">
+        <header>
+          <h1>To-Do List</h1>
+          <p id="tasks-completed" aria-live="polite"></p>
+          <div>
+            <button id="delete" class="btn">Delete completed tasks</button>
+          </div>
+
+          <button id="filter-all" class="btn">All</button>
+          <button id="filter-completed" class="btn">Completed</button>
+          <button id="filter-non-completed" class="btn">Not Completed</button>
+        </header>
+        <div id="tasks">
+          <form class="task-form hidden" id="task-form">
+            <div id="task-form-header">
+              <button
+                type="button"
+                id="close-task-form-btn"
+                aria-label="close task form"
+                class="btn"
+              >
+                X
+              </button>
+            </div>
+            <label for="title">Title</label>
+            <input id="title" type="text" class="inputs" />
+            <label for="date">Date</label>
+            <input id="date" type="date" class="inputs" />
+            <label for="description">Description</label>
+            <textarea
+              id="description"
+              class="inputs"
+              cols="30"
+              rows="5"
+            ></textarea>
+            <button type="submit" id="submit-task-form-button" class="btn">
+              Add task
+            </button>
+          </form>
+          <div id="task-list" role="list"></div>
+          <button id="add-task" class="task-button btn">Add new task</button>
+        </div>
+      </section>
+    </main>
+    <dialog id="close-dialog">
+      <form method="dialog">
+        <p id="dialog-text">Do you want to discard the changes?</p>
+        <div class="dialog-btn-container">
+          <button id="cancel-all-tasks-btn" class="btn hidden">cancel</button>
+          <button id="cancel-btn" class="btn">cancel</button>
+          <button id="delete-all-tasks-btn" class="btn hidden">delete</button>
+          <button id="discard-btn" class="btn">discard</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
