@@ -59,13 +59,6 @@ Add three tasks → mark one as completed → click **Completed** to see it, or 
 
 ---
 
-## Live Demo
-
-➡️ _(Optional: add your GitHub Pages link here)_  
-Example: [View Live Demo](https://yourusername.github.io/todo-list/)
-
----
-
 ## Author
 
 **Samuel Bayer**  
