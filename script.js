@@ -20,6 +20,7 @@ const cancelAllTasksBtn = document.getElementById("cancel-all-tasks-btn");
 const deleteAllTasksBtn = document.getElementById("delete-all-tasks-btn");
 let tasks = JSON.parse(localStorage.getItem("data")) || [];
 let currentFilter = "all";
+let lastPointerPos = null; // fallback position when originalEvent is missing
 
 function removeSpecialChars(value) {
   return value.trim().replace(/[^A-Za-z0-9\-\s]/g, "");
@@ -146,13 +147,55 @@ function checkTasks() {
 }
 
 function initSortable() {
-  new Sortable(tasksContainer, {
-    animation: 150,
+  // store instance so manual drag can destroy/recreate it
+  window.sortableInstance = new Sortable(tasksContainer, {
+    animation: 0,
     handle: ".my-handle",
-    delay: 300,
+    delay: 200,
     delayOnTouchOnly: true,
-    touchStartThreshold: 5,
-    onEnd: () => {
+    touchStartThreshold: 0,
+    // Use fallback drag (clone follows pointer) and disable swap for precise following
+    forceFallback: true,
+    fallbackOnBody: true,
+    fallbackTolerance: 0,
+    swap: false,
+    onStart: (evt) => {
+      // Fallback to lastPointerPos (no-op for production)
+      try {
+        const e = evt && (evt.originalEvent || {});
+        let pos = null;
+        if (e && e.touches && e.touches[0]) pos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        else if (typeof e.clientX === 'number' && typeof e.clientY === 'number') pos = { x: e.clientX, y: e.clientY };
+        else pos = lastPointerPos;
+      } catch (err) {
+        // silently ignore
+      }
+    },
+    onMove: (evt, originalEvent) => {
+      // Use fallback position if needed (no-op logging in production)
+      try {
+        const e = originalEvent || (evt && evt.originalEvent) || {};
+        let pos = null;
+        if (e && e.touches && e.touches[0]) pos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        else if (typeof e.clientX === 'number' && typeof e.clientY === 'number') pos = { x: e.clientX, y: e.clientY };
+        else pos = lastPointerPos;
+      } catch (err) {
+        // silently ignore
+      }
+      return true;
+    },
+    onEnd: (evt) => {
+      // Use safe fallback to lastPointerPos
+      try {
+        const e = evt && (evt.originalEvent || {});
+        let pos = null;
+        if (e && e.touches && e.touches[0]) pos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        else if (typeof e.clientX === 'number' && typeof e.clientY === 'number') pos = { x: e.clientX, y: e.clientY };
+        else pos = lastPointerPos;
+      } catch (err) {
+        // silently ignore
+      }
+
       const newOrder = Array.from(tasksContainer.children).map((div) => div.id);
       const reordered = newOrder.map((id) =>
         tasks.find((task) => task.id === id)
@@ -160,6 +203,8 @@ function initSortable() {
       localStorage.setItem("data", JSON.stringify(reordered));
       tasks.length = 0;
       tasks.push(...reordered);
+      // clear fallback
+      lastPointerPos = null;
     },
   });
 }
@@ -264,3 +309,178 @@ tasksCompleted();
 initSortable();
 checkTasks();
 setActiveFilter(filterAll);
+
+// Prevent context menu on the handle to avoid interfering with long-press drag on mobile
+document.addEventListener('contextmenu', (e) => {
+  if (e.target && e.target.closest && e.target.closest('.my-handle')) {
+    e.preventDefault();
+  }
+});
+
+// Instrument handle pointer/touch events and implement manual drag (long-press -> clone follows pointer, placeholder swap)
+let handleActive = false;
+let touchActive = false;
+const MANUAL_DELAY = 300; // ms long press to start manual drag
+const manual = {
+  active: false,
+  dragItem: null,
+  dragClone: null,
+  placeholder: null,
+  offset: { x: 0, y: 0 },
+  pointerId: null,
+  longPressTimeout: null,
+};
+
+function createPlaceholder(height) {
+  const ph = document.createElement('div');
+  ph.className = 'task placeholder';
+  ph.style.height = height + 'px';
+  ph.style.border = '0';
+  ph.style.background = 'transparent';
+  ph.style.margin = getComputedStyle(document.querySelector('.task')).margin;
+  return ph;
+}
+
+function startManualDrag(e, item) {
+  if (!item) return;
+  manual.active = true;
+  manual.dragItem = item;
+  const rect = item.getBoundingClientRect();
+  manual.offset.x = e.clientX - rect.left;
+  manual.offset.y = e.clientY - rect.top;
+
+  // Clone
+  const clone = item.cloneNode(true);
+  clone.classList.add('drag-clone');
+  clone.style.width = rect.width + 'px';
+  clone.style.height = rect.height + 'px';
+  clone.style.position = 'fixed';
+  clone.style.left = rect.left + 'px';
+  clone.style.top = rect.top + 'px';
+  clone.style.margin = '0';
+  clone.style.pointerEvents = 'none';
+  clone.style.zIndex = 9999;
+  document.body.appendChild(clone);
+  manual.dragClone = clone;
+
+  // Placeholder at item's position
+  const placeholder = createPlaceholder(rect.height);
+  item.parentNode.replaceChild(placeholder, item);
+  manual.placeholder = placeholder;
+
+  // hide original item (we'll re-insert on drop)
+  item.style.visibility = 'hidden';
+
+  // stop Sortable while we use manual drag
+  if (window.sortableInstance && typeof window.sortableInstance.destroy === 'function') {
+    try { window.sortableInstance.destroy(); } catch (err) { /* ignore */ }
+  }
+
+  // prevent page scroll
+  document.body.classList.add('sortable-no-scroll');
+
+  // capture pointer to ensure we receive events
+  if (e.pointerId && e.target.setPointerCapture) {
+    try { e.target.setPointerCapture(e.pointerId); manual.pointerId = e.pointerId; } catch (err) { /* ignore */ }
+  }
+
+  // add listeners
+  document.addEventListener('pointermove', onManualPointerMove);
+  document.addEventListener('pointerup', onManualPointerUp);
+}
+
+function onManualPointerMove(e) {
+  if (!manual.active) return;
+  e.preventDefault();
+  lastPointerPos = { x: e.clientX, y: e.clientY };
+  // move clone
+  const left = e.clientX - manual.offset.x;
+  const top = e.clientY - manual.offset.y;
+  manual.dragClone.style.left = left + 'px';
+  manual.dragClone.style.top = top + 'px';
+
+  // find where to place placeholder
+  const children = Array.from(tasksContainer.children).filter((c) => c !== manual.placeholder);
+  let inserted = false;
+  for (const child of children) {
+    const r = child.getBoundingClientRect();
+    const centerY = r.top + r.height / 2;
+    if (e.clientY < centerY) {
+      tasksContainer.insertBefore(manual.placeholder, child);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) tasksContainer.appendChild(manual.placeholder);
+}
+
+function onManualPointerUp(e) {
+  if (!manual.active) return;
+  e.preventDefault();
+  // release pointer capture
+  if (manual.pointerId && e.target.releasePointerCapture) {
+    try { e.target.releasePointerCapture(manual.pointerId); } catch (err) { /* ignore */ }
+  }
+
+  // remove clone and insert original at placeholder
+  const item = manual.dragItem;
+  manual.placeholder.parentNode.replaceChild(item, manual.placeholder);
+  item.style.visibility = '';
+
+  // cleanup clone
+  if (manual.dragClone && manual.dragClone.parentNode) manual.dragClone.parentNode.removeChild(manual.dragClone);
+
+  // cleanup listeners and flags
+  document.removeEventListener('pointermove', onManualPointerMove);
+  document.removeEventListener('pointerup', onManualPointerUp);
+  document.body.classList.remove('sortable-no-scroll');
+
+  // update tasks array order based on DOM
+  const newOrder = Array.from(tasksContainer.children).map((div) => div.id);
+  const reordered = newOrder.map((id) => tasks.find((t) => t.id === id));
+  localStorage.setItem('data', JSON.stringify(reordered));
+  tasks.length = 0;
+  tasks.push(...reordered);
+
+  // re-init Sortable
+  initSortable();
+
+  // reset
+  manual.active = false;
+  manual.dragItem = null;
+  manual.dragClone = null;
+  manual.placeholder = null;
+  manual.pointerId = null;
+  lastPointerPos = null;
+}
+
+// Start long-press on pointerdown on handle
+document.addEventListener('pointerdown', (e) => {
+  const handle = e.target && e.target.closest && e.target.closest('.my-handle');
+  if (!handle) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const item = handle.closest('.task');
+  // start long-press timer
+  clearTimeout(manual.longPressTimeout);
+  manual.longPressTimeout = setTimeout(() => startManualDrag(e, item), MANUAL_DELAY);
+
+  // cancel if pointerup/cancel before delay
+  const cancel = () => { clearTimeout(manual.longPressTimeout); document.removeEventListener('pointerup', cancel); document.removeEventListener('pointercancel', cancel); };
+  document.addEventListener('pointerup', cancel, { once: true });
+  document.addEventListener('pointercancel', cancel, { once: true });
+});
+
+// touch fallback: start on touchstart and handle touchmove/touchend
+document.addEventListener('touchstart', (e) => {
+  const handle = e.target && e.target.closest && e.target.closest('.my-handle');
+  if (!handle) return;
+  const touch = e.touches[0];
+  if (!touch) return;
+  clearTimeout(manual.longPressTimeout);
+  manual.longPressTimeout = setTimeout(() => startManualDrag({ clientX: touch.clientX, clientY: touch.clientY, pointerId: null, target: handle }, handle.closest('.task')), MANUAL_DELAY);
+  const cancel = () => { clearTimeout(manual.longPressTimeout); document.removeEventListener('touchend', cancel); document.removeEventListener('touchcancel', cancel); };
+  document.addEventListener('touchend', cancel, { once: true });
+  document.addEventListener('touchcancel', cancel, { once: true });
+}, { passive: true });
