@@ -76,6 +76,7 @@ function updateTaskContainer() {
     tasksContainer.innerHTML += `<div class="task ${
       completed ? "task-completed" : ""
     }" id="${id}" role="listitem">
+      <span class="my-handle" role="button" aria-label="Drag to reorder" tabindex="0">⋮⋮</span>
     <input type="checkbox" ${
       completed ? "checked" : ""
     } onchange="toggleComplete('${id}', this.checked)" class="checkbox" aria-label="Mark task '${title}' as completed" >
@@ -147,6 +148,10 @@ function checkTasks() {
 function initSortable() {
   new Sortable(tasksContainer, {
     animation: 150,
+    handle: ".my-handle",
+    delay: 300,
+    delayOnTouchOnly: true,
+    touchStartThreshold: 5,
     onEnd: () => {
       const newOrder = Array.from(tasksContainer.children).map((div) => div.id);
       const reordered = newOrder.map((id) =>

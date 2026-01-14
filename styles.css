@@ -243,3 +243,20 @@ dialog {
   background-color: rgba(0, 0, 0, 0.2);
   border-radius: 3px;
 }
+
+/* Drag handle */
+.my-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  padding: 6px 8px;
+  margin-right: 8px;
+  font-size: 18px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.my-handle:active {
+  cursor: grabbing;
+}
